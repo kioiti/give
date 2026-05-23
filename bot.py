@@ -2,10 +2,13 @@ import os
 import json
 import asyncio
 import discord
-import requests
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
 load_dotenv()
 
@@ -24,16 +27,6 @@ SEEN_FILE = "seen_posts.json"
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/136.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "ko-KR,ko;q=0.9",
-    "Referer": "https://tr.game.onstove.com/",
-}
 
 
 def load_seen():
@@ -68,109 +61,178 @@ def is_recent(time_text: str):
     return False
 
 
-async def fetch_posts():
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.chrome.options import Options
-
+def create_driver():
     options = Options()
 
     options.binary_location = "/usr/bin/chromium-browser"
 
-    options.add_argument("--headless")
+    # 헤드리스 제거 (WAF 우회 확률 증가)
+    # options.add_argument("--headless=new")
+
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--start-maximized")
+
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0.0.0 Safari/537.36"
+    )
 
     driver = webdriver.Chrome(options=options)
 
-    driver.get(URL)
-
-    await asyncio.sleep(3)
-
-    html = driver.page_source
-
-    print(html[:3000])
-    driver.quit()
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    rows = soup.select("tr.border-b")
-
-    print(f"읽은 게시글 row 수: {len(rows)}")
-
-    posts = []
-
-    for row in rows:
-        tds = row.select("td")
-
-        if len(tds) < 5:
-            continue
-
-        category_el = row.select_one("td:first-child span.rounded-full")
-        category = category_el.get_text(" ", strip=True) if category_el else ""
-
-        title_el = row.select_one("span.truncate.hover\\:underline")
-
-        if not title_el:
-            continue
-
-        title = title_el.get_text(" ", strip=True)
-
-        if not title:
-            continue
-
-        if any(exclude in title for exclude in EXCLUDE_KEYWORDS):
-            continue
-
-        is_keyword_matched = any(keyword in title for keyword in KEYWORDS)
-        is_raffle_category = category == "추첨"
-
-        if not is_keyword_matched and not is_raffle_category:
-            continue
-
-        time_text = tds[-1].get_text(" ", strip=True)
-
-        if not is_recent(time_text):
-            continue
-
-        author = tds[3].get_text(" ", strip=True)
-        author = author.replace("Level image", "").strip()
-
-        post_id = None
-
-        button_el = row.select_one("button[popovertarget]")
-
-        if button_el:
-            post_id = button_el.get("popovertarget")
-
-        if post_id:
-            link = f"{BASE_DETAIL_URL}/{post_id}?page=1"
-            post_key = post_id
-        else:
-            link = URL
-            post_key = f"{title}|{author}"
-
-        matched_keywords = [
-            keyword for keyword in KEYWORDS
-            if keyword in title
-        ]
-
-        if is_raffle_category and "추첨" not in matched_keywords:
-            matched_keywords.append("추첨카테고리")
-
-        posts.append({
-            "key": post_key,
-            "title": title,
-            "author": author,
-            "time": time_text,
-            "link": link,
-            "matched_keywords": matched_keywords,
-            "category": category,
+    driver.execute_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
         })
+    """)
 
-    print(f"감지된 키워드 게시글 수: {len(posts)}")
+    return driver
 
-    return posts
+
+async def fetch_posts():
+    driver = create_driver()
+
+    try:
+        driver.get(URL)
+
+        await asyncio.sleep(5)
+
+        html = driver.page_source
+
+        print("=" * 50)
+        print(html[:3000])
+        print("=" * 50)
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        rows = soup.select("tr")
+
+        print(f"읽은 게시글 row 수: {len(rows)}")
+
+        posts = []
+
+        for row in rows:
+            tds = row.select("td")
+
+            if len(tds) < 5:
+                continue
+
+            category_el = row.select_one(
+                "td:first-child span.rounded-full"
+            )
+
+            category = (
+                category_el.get_text(" ", strip=True)
+                if category_el else ""
+            )
+
+            title_el = row.select_one(
+                "span.truncate.hover\\:underline"
+            )
+
+            if not title_el:
+                continue
+
+            title = title_el.get_text(" ", strip=True)
+
+            if not title:
+                continue
+
+            if any(
+                exclude in title
+                for exclude in EXCLUDE_KEYWORDS
+            ):
+                print("제외된 글:", title)
+                continue
+
+            is_keyword_matched = any(
+                keyword in title
+                for keyword in KEYWORDS
+            )
+
+            is_raffle_category = category == "추첨"
+
+            if (
+                not is_keyword_matched
+                and not is_raffle_category
+            ):
+                continue
+
+            time_text = tds[-1].get_text(
+                " ",
+                strip=True
+            )
+
+            if not is_recent(time_text):
+                continue
+
+            author = tds[3].get_text(
+                " ",
+                strip=True
+            )
+
+            author = author.replace(
+                "Level image",
+                ""
+            ).strip()
+
+            post_id = None
+
+            button_el = row.select_one(
+                "button[popovertarget]"
+            )
+
+            if button_el:
+                post_id = button_el.get(
+                    "popovertarget"
+                )
+
+            if post_id:
+                link = (
+                    f"{BASE_DETAIL_URL}/"
+                    f"{post_id}?page=1"
+                )
+
+                post_key = post_id
+
+            else:
+                link = URL
+                post_key = f"{title}|{author}"
+
+            matched_keywords = [
+                keyword
+                for keyword in KEYWORDS
+                if keyword in title
+            ]
+
+            if (
+                is_raffle_category
+                and "추첨" not in matched_keywords
+            ):
+                matched_keywords.append(
+                    "추첨카테고리"
+                )
+
+            posts.append({
+                "key": post_key,
+                "title": title,
+                "author": author,
+                "time": time_text,
+                "link": link,
+                "matched_keywords": matched_keywords,
+                "category": category,
+            })
+
+        print(
+            f"감지된 키워드 게시글 수: {len(posts)}"
+        )
+
+        return posts
+
+    finally:
+        driver.quit()
 
 
 async def monitor():
@@ -213,7 +275,8 @@ async def monitor():
                 print("알림 전송:", post["title"])
 
         except Exception as e:
-            print("오류 발생:", e)
+            import traceback
+            traceback.print_exc()
 
         await asyncio.sleep(CHECK_INTERVAL)
 

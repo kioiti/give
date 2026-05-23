@@ -164,7 +164,11 @@ async def monitor():
         print("채널을 찾을 수 없습니다.")
         return
 
+    print("playwright 시작 전")
+
     playwright = await async_playwright().start()
+
+    print("playwright 시작 완료")
 
     browser = await playwright.chromium.launch(
         executable_path="/usr/bin/chromium-browser",

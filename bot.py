@@ -69,12 +69,32 @@ def is_recent(time_text: str):
 
 
 async def fetch_posts():
-    response = requests.get(URL, headers=HEADERS, timeout=30)
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.options import Options
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    options = Options()
+
+    options.binary_location = "/usr/bin/chromium-browser"
+
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(options=options)
+
+    driver.get(URL)
+
+    await asyncio.sleep(3)
+
+    html = driver.page_source
+
+    driver.quit()
+
+    soup = BeautifulSoup(html, "html.parser")
 
     rows = soup.select("tr.border-b")
-    print(rows[:3])
+
     print(f"읽은 게시글 row 수: {len(rows)}")
 
     posts = []
@@ -99,7 +119,6 @@ async def fetch_posts():
             continue
 
         if any(exclude in title for exclude in EXCLUDE_KEYWORDS):
-            print("제외된 글:", title)
             continue
 
         is_keyword_matched = any(keyword in title for keyword in KEYWORDS)

@@ -30,7 +30,9 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/136.0.0.0 Safari/537.36"
-    )
+    ),
+    "Accept-Language": "ko-KR,ko;q=0.9",
+    "Referer": "https://tr.game.onstove.com/",
 }
 
 
@@ -71,8 +73,8 @@ async def fetch_posts():
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    rows = soup.select("tr")
-
+    rows = soup.select("tr.border-b")
+    print(rows[:3])
     print(f"읽은 게시글 row 수: {len(rows)}")
 
     posts = []

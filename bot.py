@@ -64,15 +64,16 @@ def is_recent(time_text: str):
 def create_driver():
     options = Options()
 
-    options.binary_location = "/usr/bin/chromium-browser"
+    options.binary_location = "/usr/bin/google-chrome"
 
-    # 헤드리스 제거 (WAF 우회 확률 증가)
+    # 일단 headless 끔
     # options.add_argument("--headless=new")
 
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--start-maximized")
+
+    options.add_argument("--window-size=1920,1080")
 
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -80,7 +81,12 @@ def create_driver():
         "Chrome/136.0.0.0 Safari/537.36"
     )
 
-    driver = webdriver.Chrome(options=options)
+    service = Service("/usr/bin/chromedriver")
+
+    driver = webdriver.Chrome(
+        service=service,
+        options=options
+    )
 
     driver.execute_script("""
         Object.defineProperty(navigator, 'webdriver', {

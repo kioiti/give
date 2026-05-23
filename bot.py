@@ -2,10 +2,10 @@ import os
 import json
 import asyncio
 import discord
+import requests
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from playwright.async_api import async_playwright
 
 load_dotenv()
 
@@ -25,8 +25,13 @@ SEEN_FILE = "seen_posts.json"
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-playwright = None
-browser = None
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0.0.0 Safari/537.36"
+    )
+}
 
 
 def load_seen():
@@ -62,17 +67,10 @@ def is_recent(time_text: str):
 
 
 async def fetch_posts():
-    global browser
+    response = requests.get(URL, headers=HEADERS, timeout=30)
 
-    page = await browser.new_page()
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    await page.goto(URL, wait_until="networkidle", timeout=30000)
-    await page.wait_for_timeout(1500)
-
-    html = await page.content()
-    await page.close()
-
-    soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("tr")
 
     print(f"읽은 게시글 row 수: {len(rows)}")
@@ -85,19 +83,19 @@ async def fetch_posts():
         if len(tds) < 5:
             continue
 
-        # 카테고리: 자유 / 추첨 등
         category_el = row.select_one("td:first-child span.rounded-full")
         category = category_el.get_text(" ", strip=True) if category_el else ""
 
         title_el = row.select_one("span.truncate.hover\\:underline")
+
         if not title_el:
             continue
 
         title = title_el.get_text(" ", strip=True)
+
         if not title:
             continue
 
-        # 제외 키워드가 들어간 제목은 알림 제외
         if any(exclude in title for exclude in EXCLUDE_KEYWORDS):
             print("제외된 글:", title)
             continue
@@ -105,7 +103,6 @@ async def fetch_posts():
         is_keyword_matched = any(keyword in title for keyword in KEYWORDS)
         is_raffle_category = category == "추첨"
 
-        # 제목에 감지 키워드가 있거나, 카테고리가 추첨이면 알림 대상
         if not is_keyword_matched and not is_raffle_category:
             continue
 
@@ -117,9 +114,10 @@ async def fetch_posts():
         author = tds[3].get_text(" ", strip=True)
         author = author.replace("Level image", "").strip()
 
-        # 게시글 ID 추출: popovertarget="138337"
         post_id = None
+
         button_el = row.select_one("button[popovertarget]")
+
         if button_el:
             post_id = button_el.get("popovertarget")
 
@@ -154,8 +152,6 @@ async def fetch_posts():
 
 
 async def monitor():
-    global playwright, browser
-
     await client.wait_until_ready()
 
     channel = client.get_channel(CHANNEL_ID)
@@ -163,18 +159,6 @@ async def monitor():
     if channel is None:
         print("채널을 찾을 수 없습니다.")
         return
-
-    print("playwright 시작 전")
-
-    playwright = await async_playwright().start()
-
-    print("playwright 시작 완료")
-
-    browser = await playwright.chromium.launch(
-        executable_path="/usr/bin/chromium-browser",
-        headless=True,
-        args=["--no-sandbox", "--disable-dev-shm-usage"]
-    )
 
     seen = load_seen()
 

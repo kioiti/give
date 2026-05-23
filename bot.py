@@ -107,7 +107,7 @@ reaction = [
 
 # ---------------- 상태 ----------------
 last_seen = {}
-next_ping = {}   # 👈 핵심 (랜덤 타이머)
+next_ping = {}
 
 
 # ---------------- JSON ----------------
@@ -138,11 +138,12 @@ async def on_message(message):
     user_id = message.author.id
     now = datetime.now()
 
-    # 활동 기록
+    # 마지막 활동 기록
     last_seen[user_id] = now
 
-    # 👇 다음 알림 시간 랜덤 리셋 (1~5시간)
-    next_ping[user_id] = now + timedelta(hours=random.randint(1, 5))
+    # 처음 보면 오래된 상태 → 바로 체크되게 초기값 세팅
+    if user_id not in next_ping:
+        next_ping[user_id] = now + timedelta(hours=random.randint(1, 5))
 
     content = message.content.strip()
 
@@ -203,7 +204,7 @@ async def on_message(message):
         sorted_data = sorted(data.items(), key=lambda x: x[1], reverse=True)
         msg = "📊 랭킹\n"
 
-        for i,(u,cnt) in enumerate(sorted_data[:5],1):
+        for i, (u, cnt) in enumerate(sorted_data[:5], 1):
             name = USER_MAP.get(int(u), u)
             msg += f"{i}. {name} - {cnt}\n"
 
@@ -212,7 +213,7 @@ async def on_message(message):
     elif content == "!내순위":
         sorted_data = sorted(data.items(), key=lambda x: x[1], reverse=True)
 
-        for i,(u,cnt) in enumerate(sorted_data,1):
+        for i, (u, cnt) in enumerate(sorted_data, 1):
             if u == uid:
                 await message.channel.send(f"🏆 {i}등 ({cnt})")
                 return
@@ -225,7 +226,7 @@ async def on_message(message):
         )
 
 
-# ---------------- 🔥 핵심: 랜덤 잠수 알림 ----------------
+# ---------------- 🔥 잠수 시스템 ----------------
 async def idle_checker():
     await client.wait_until_ready()
 
@@ -234,29 +235,27 @@ async def idle_checker():
 
         for uid, name in USER_MAP.items():
 
-            if uid not in next_ping:
-                next_ping[uid] = now + timedelta(hours=random.randint(1, 5))
-                continue
+            # 👉 마지막 활동 없으면 "오래된 상태"로 처리
+            last = last_seen.get(uid, now - timedelta(hours=10))
+            diff = now - last
 
-            if now < next_ping[uid]:
-                continue
-
+            # 메시지 리스트 (네가 준 그대로 사용)
             messages = [
                 f"{name}아 뭐하냐 또 잠수냐?",
                 f"{name}아 ㅋㅋ 또 안 보이네",
                 f"{name}아 이걸 잔다고?",
                 f"{name}아 진짜 말안댄다.",
-                f"{name}아 언제와? 왜 안와? 어디야? ",
-                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 ",
-                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 ",
-                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 ",
-                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 ",
-                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 ",
-                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 ",
+                f"{name}아 언제와? 왜 안와? 어디야?",
+                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며",
+                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며",
+                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며",
+                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며",
+                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며",
+                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며",
                 f"{name} 살아있냐?",
                 f"{name} 어디갔냐",
                 f"{name} 일어나라 테런 켜라.",
-                f"{name} 오늘도 잠수냐?"
+                f"{name} 오늘도 잠수냐?",
                 f"{name} 채팅 금지 상태냐?",
                 f"{name} 너 어디갔냐",
                 f"{name} 잠수함 출항함?",
@@ -264,15 +263,26 @@ async def idle_checker():
 
             msg = random.choice(messages)
 
-            for ch in client.get_all_channels():
-                if hasattr(ch, "send"):
+            # 시간 기준 조건
+            if diff > timedelta(hours=5):
+                pass
+            elif diff > timedelta(hours=3):
+                pass
+            elif diff > timedelta(hours=1):
+                pass
+            else:
+                continue
+
+            # 랜덤 확률
+            if random.random() < 0.5:
+                for ch in client.get_all_channels():
                     try:
                         await ch.send(msg)
                         break
                     except:
                         pass
 
-            # 👇 다음 알림 시간 재설정 (핵심)
+            # 다음 알림 랜덤 리셋 (1~5시간)
             next_ping[uid] = now + timedelta(hours=random.randint(1, 5))
 
         await asyncio.sleep(60)

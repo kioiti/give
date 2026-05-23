@@ -235,11 +235,19 @@ async def idle_checker():
 
         for uid, name in USER_MAP.items():
 
-            # 👉 마지막 활동 없으면 "오래된 상태"로 처리
+            # 마지막 활동 없으면 오래된 상태 처리
             last = last_seen.get(uid, now - timedelta(hours=10))
-            diff = now - last
 
-            # 메시지 리스트 (네가 준 그대로 사용)
+            # next_ping 없으면 초기화
+            if uid not in next_ping:
+                next_ping[uid] = now + timedelta(hours=random.randint(1, 5))
+                continue
+
+            # 🚨 핵심 1: 아직 시간이 안 됐으면 절대 실행 안 함
+            if now < next_ping[uid]:
+                continue
+
+            # 메시지 리스트
             messages = [
                 f"{name}아 뭐하냐 또 잠수냐?",
                 f"{name}아 ㅋㅋ 또 안 보이네",
@@ -263,26 +271,16 @@ async def idle_checker():
 
             msg = random.choice(messages)
 
-            # 시간 기준 조건
-            if diff > timedelta(hours=5):
-                pass
-            elif diff > timedelta(hours=3):
-                pass
-            elif diff > timedelta(hours=1):
-                pass
-            else:
-                continue
-
-            # 랜덤 확률
-            if random.random() < 0.5:
+            # 🚨 핵심 2: 한 번만 보내고 끝
+            try:
                 for ch in client.get_all_channels():
-                    try:
+                    if hasattr(ch, "send"):
                         await ch.send(msg)
                         break
-                    except:
-                        pass
+            except:
+                pass
 
-            # 다음 알림 랜덤 리셋 (1~5시간)
+            # 🚨 핵심 3: 무조건 다음 알림 1~5시간 뒤로 밀기
             next_ping[uid] = now + timedelta(hours=random.randint(1, 5))
 
         await asyncio.sleep(60)

@@ -89,6 +89,7 @@ async def fetch_posts():
 
     html = driver.page_source
 
+    print(html[:3000])
     driver.quit()
 
     soup = BeautifulSoup(html, "html.parser")

@@ -167,6 +167,7 @@ async def monitor():
     playwright = await async_playwright().start()
 
     browser = await playwright.chromium.launch(
+        executable_path="/usr/bin/chromium",
         headless=True
     )
 

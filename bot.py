@@ -66,20 +66,10 @@ def create_driver():
 
     options.binary_location = "/usr/bin/google-chrome"
 
-    # 일단 headless 끔
-    # options.add_argument("--headless=new")
-
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-
-    options.add_argument("--window-size=1920,1080")
-
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/136.0.0.0 Safari/537.36"
-    )
+    options.add_argument("--disable-gpu")
 
     service = Service("/usr/bin/chromedriver")
 
@@ -88,14 +78,7 @@ def create_driver():
         options=options
     )
 
-    driver.execute_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        })
-    """)
-
     return driver
-
 
 async def fetch_posts():
     driver = create_driver()

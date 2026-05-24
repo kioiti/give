@@ -304,7 +304,12 @@ async def on_message(message):
 
         for i, (u, cnt) in enumerate(sorted_data[:5], 1):
             try:
-                name = message.guild.get_member(int(u)).display_name
+                name = USER_MAP.get(int(u))
+
+                if not name:
+                    member = message.guild.get_member(int(u))
+                    name = member.display_name if member else u
+
             except:
                 name = u
 

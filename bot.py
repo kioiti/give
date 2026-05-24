@@ -2,9 +2,7 @@ import os
 import json
 import random
 import discord
-import asyncio
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -16,18 +14,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 DATA_FILE = "activity.json"
-
-
-# ---------------- 유저 매핑 ----------------
-USER_MAP = {
-    1501525905833594900: "머래",
-    261016503963353098: "계삭",
-    464655989996519424: "마라콩",
-    707895110972473345: "밈콩",
-    435351384137662464: "지성콩",
-    1004779456696688760: "미희여사",
-    706114030061879296: "에빙",
-}
+MONEY_FILE = "money.json"
 
 
 # ---------------- 밈 ----------------
@@ -104,18 +91,37 @@ reaction = [
     "레전드 상황"
 ]
 
+fortune = [
+    "오늘은 뭘 해도 잘 풀린다 🍀",
+    "오늘은 억까 조심",
+    "곧 좋은 일 생김",
+    "오늘은 잠이나 자라 😴",
+    "오늘은 집중력 미쳤다",
+    "오늘은 현질 금지",
+    "오늘은 게임각이다",
+    "오늘은 운 다 씀",
+]
 
-# ---------------- 상태 ----------------
-last_seen = {}
-next_ping = {}
+tiers = [
+    "브론즈",
+    "실버",
+    "골드",
+    "플래티넘",
+    "다이아",
+    "마스터",
+    "그랜드마스터",
+    "챌린저"
+]
 
 
 # ---------------- JSON ----------------
 def load_json(path):
     if not os.path.exists(path):
         return {}
+
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
 
 def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
@@ -126,7 +132,6 @@ def save_json(path, data):
 @client.event
 async def on_ready():
     print(f"{client.user} 로그인 완료")
-    client.loop.create_task(idle_checker())
 
 
 # ---------------- 메시지 ----------------
@@ -134,16 +139,6 @@ async def on_ready():
 async def on_message(message):
     if message.author == client.user:
         return
-
-    user_id = message.author.id
-    now = datetime.now()
-
-    # 마지막 활동 기록
-    last_seen[user_id] = now
-
-    # 처음 보면 오래된 상태 → 바로 체크되게 초기값 세팅
-    if user_id not in next_ping:
-        next_ping[user_id] = now + timedelta(hours=random.randint(1, 5))
 
     content = message.content.strip()
 
@@ -160,6 +155,89 @@ async def on_message(message):
     elif content == "!반응":
         await message.channel.send(random.choice(reaction))
 
+    elif content == "!운세":
+        await message.channel.send(random.choice(fortune))
+
+    elif content == "!티어":
+        await message.channel.send(
+            f"🏆 오늘의 티어 : {random.choice(tiers)}"
+        )
+
+    # ---------------- 강화 시스템 ----------------
+    elif content == "!강화":
+        percent = random.randint(1, 100)
+
+        if percent <= 5:
+            msg = "💥 강화 대폭발"
+        elif percent <= 40:
+            msg = "❌ 강화 실패"
+        elif percent <= 90:
+            msg = "✅ 강화 성공"
+        else:
+            msg = "🔥 초대박 강화 성공"
+
+        await message.channel.send(msg)
+
+    # ---------------- 호감도 ----------------
+    elif content.startswith("!호감도"):
+        target = content[5:].strip()
+
+        if not target:
+            await message.channel.send("!호감도 @닉네임")
+            return
+
+        percent = random.randint(0, 100)
+
+        if percent <= 20:
+            mood = "💀 거의 원수급"
+        elif percent <= 50:
+            mood = "😐 애매함"
+        elif percent <= 80:
+            mood = "😊 꽤 친함"
+        else:
+            mood = "💖 찐호감"
+
+        await message.channel.send(
+            f"{target} 호감도 : {percent}% {mood}"
+        )
+
+    # ---------------- 도박 시스템 ----------------
+    elif content == "!도박":
+
+        money = load_json(MONEY_FILE)
+
+        uid = str(message.author.id)
+
+        if uid not in money:
+            money[uid] = 1000
+
+        amount = random.randint(-500, 1000)
+
+        money[uid] += amount
+
+        save_json(MONEY_FILE, money)
+
+        if amount >= 0:
+            await message.channel.send(
+                f"💰 +{amount}원 획득! (현재 {money[uid]}원)"
+            )
+        else:
+            await message.channel.send(
+                f"💀 {abs(amount)}원 잃음... (현재 {money[uid]}원)"
+            )
+
+    elif content == "!돈":
+        money = load_json(MONEY_FILE)
+
+        uid = str(message.author.id)
+
+        if uid not in money:
+            money[uid] = 1000
+            save_json(MONEY_FILE, money)
+
+        await message.channel.send(
+            f"💵 현재 돈 : {money[uid]}원"
+        )
 
     # ---------------- 게임 ----------------
     elif content == "!주사위":
@@ -172,11 +250,15 @@ async def on_message(message):
             await message.channel.send("!가위바위보 가위/바위/보")
             return
 
-        bot = random.choice(["가위","바위","보"])
+        bot = random.choice(["가위", "바위", "보"])
 
         if user == bot:
             result = "무승부"
-        elif (user=="가위" and bot=="보") or (user=="바위" and bot=="가위") or (user=="보" and bot=="바위"):
+        elif (
+            (user == "가위" and bot == "보")
+            or (user == "바위" and bot == "가위")
+            or (user == "보" and bot == "바위")
+        ):
             result = "승리"
         else:
             result = "패배"
@@ -184,28 +266,37 @@ async def on_message(message):
         await message.channel.send(f"너:{user} / 봇:{bot} → {result}")
 
     elif content.startswith("!숫자"):
-        answer = random.randint(0,5)
+        answer = random.randint(0, 5)
+
         try:
             guess = int(content.split(" ")[1])
         except:
             await message.channel.send("!숫자 3")
             return
 
-        await message.channel.send("정답 🎉" if guess == answer else f"틀림 💀 ({answer})")
-
+        await message.channel.send(
+            "정답 🎉" if guess == answer else f"틀림 💀 ({answer})"
+        )
 
     # ---------------- 랭킹 ----------------
     data = load_json(DATA_FILE)
+
     uid = str(message.author.id)
     data[uid] = data.get(uid, 0) + 1
+
     save_json(DATA_FILE, data)
 
     if content == "!랭킹":
         sorted_data = sorted(data.items(), key=lambda x: x[1], reverse=True)
-        msg = "📊 랭킹\n"
+
+        msg = "📊 채팅 랭킹\n"
 
         for i, (u, cnt) in enumerate(sorted_data[:5], 1):
-            name = USER_MAP.get(int(u), u)
+            try:
+                name = message.guild.get_member(int(u)).display_name
+            except:
+                name = u
+
             msg += f"{i}. {name} - {cnt}\n"
 
         await message.channel.send(msg)
@@ -218,72 +309,37 @@ async def on_message(message):
                 await message.channel.send(f"🏆 {i}등 ({cnt})")
                 return
 
+    # ---------------- 사용법 ----------------
     elif content == "!사용법":
         await message.channel.send(
-"""😂 !운빨 !징징 !오늘 !반응
-🎲 !주사위 !가위바위보 !숫자
-📊 !랭킹 !내순위"""
+"""📖 사용 가능한 명령어
+
+🎲 랜덤 / 밈
+!운빨 → 오늘 운 확인
+!운세 → 랜덤 운세
+!징징 → 징징 멘트
+!오늘 → 오늘의 상태
+!반응 → 랜덤 반응
+!티어 → 오늘의 티어
+
+🎮 게임
+!주사위
+!가위바위보 가위/바위/보
+!숫자 3
+
+🔥 강화 / 호감도
+!강화
+!호감도 @닉네임
+
+💰 돈 시스템
+!도박
+!돈
+
+📊 랭킹
+!랭킹
+!내순위
+"""
         )
-
-
-# ---------------- 🔥 잠수 시스템 ----------------
-async def idle_checker():
-    await client.wait_until_ready()
-
-    while not client.is_closed():
-        now = datetime.now()
-
-        for uid, name in USER_MAP.items():
-
-            # 마지막 활동 없으면 오래된 상태 처리
-            last = last_seen.get(uid, now - timedelta(hours=10))
-
-            # next_ping 없으면 초기화
-            if uid not in next_ping:
-                next_ping[uid] = now + timedelta(hours=random.randint(1, 5))
-                continue
-
-            # 🚨 핵심 1: 아직 시간이 안 됐으면 절대 실행 안 함
-            if now < next_ping[uid]:
-                continue
-
-            # 메시지 리스트
-            messages = [
-                f"{name}아 뭐하냐 또 잠수냐?",
-                f"{name}아 ㅋㅋ 또 안 보이네",
-                f"{name}아 이걸 잔다고?",
-                f"{name}아 진짜 말안댄다.",
-                f"{name}아 언제와? 왜 안와? 어디야?",
-                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며",
-                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며",
-                f"{name}아 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며 사랑한다며",
-                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며",
-                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며",
-                f"{name}아 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며 나밖에 없다며",
-                f"{name} 살아있냐?",
-                f"{name} 어디갔냐",
-                f"{name} 일어나라 테런 켜라.",
-                f"{name} 오늘도 잠수냐?",
-                f"{name} 채팅 금지 상태냐?",
-                f"{name} 너 어디갔냐",
-                f"{name} 잠수함 출항함?",
-            ]
-
-            msg = random.choice(messages)
-
-            # 🚨 핵심 2: 한 번만 보내고 끝
-            try:
-                for ch in client.get_all_channels():
-                    if hasattr(ch, "send"):
-                        await ch.send(msg)
-                        break
-            except:
-                pass
-
-            # 🚨 핵심 3: 무조건 다음 알림 1~5시간 뒤로 밀기
-            next_ping[uid] = now + timedelta(hours=random.randint(1, 5))
-
-        await asyncio.sleep(60)
 
 
 client.run(TOKEN)

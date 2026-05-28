@@ -111,7 +111,6 @@ async def on_message(message):
     # =====================================================
     # 확률
     # =====================================================
-
     elif content.startswith("!확률"):
 
         target = content[4:].strip()
@@ -125,22 +124,40 @@ async def on_message(message):
 
         percent = random.randint(0, 100)
 
-        if percent <= 20:
-            mood = "💀"
+        if percent <= 5:
+            mood = "☠️ 멸망"
+
+        elif percent <= 15:
+            mood = "💀 억까 감지"
+
+        elif percent <= 30:
+            mood = "🪨 쉽지않음"
 
         elif percent <= 50:
-            mood = "😐"
+            mood = "🌫 애매함"
 
-        elif percent <= 80:
-            mood = "😊"
+        elif percent <= 70:
+            mood = "✨ 가능성 있음"
+
+        elif percent <= 85:
+            mood = "🔥 좋은 흐름"
+
+        elif percent <= 95:
+            mood = "⚡ 개잘됨"
 
         else:
-            mood = "💖"
+            mood = "👑 신의 영역"
 
         await message.channel.send(
-            f"{target} : {percent}% {mood}"
-        )
+            f"""
+🎲 확률 분석 결과
 
+📌 대상 : {target}
+📈 확률 : {percent}%
+{mood}
+"""
+        )
+        
     # =====================================================
     # 사용법
     # =====================================================

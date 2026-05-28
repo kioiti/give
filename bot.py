@@ -250,7 +250,11 @@ async def on_ready():
 
     print(f"{client.user} 로그인 완료")
 
+    if not hasattr(client, "auto_fishing_started"):
 
+        client.auto_fishing_started = True
+        asyncio.create_task(auto_fishing_loop())
+        
 # =========================================================
 # 자동 낚시
 # =========================================================
@@ -787,11 +791,6 @@ async def on_message(message):
 """
         )
 
-# =========================================================
-# 자동 낚시 실행
-# =========================================================
-
-client.loop.create_task(auto_fishing_loop())
 
 # =========================================================
 # 실행
